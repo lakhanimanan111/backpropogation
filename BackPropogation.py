@@ -4,34 +4,39 @@ import numpy as np
 from random import seed
 from random import random
 
-url = "https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data"
-# url = "Test2.csv"
-input_dataset = pd.read_csv(url, header=None)
+filePath = sys.argv[1] if len(sys.argv) > 1 else "ProcessedFile"
+input_dataset = pd.read_csv(filePath)
+#print(input_dataset)
+'''
 # Removing null or missing values
 input_dataset = input_dataset.dropna()
 # Converting categorical or nominal value to numerical values
 for column in input_dataset.columns:
-     input_dataset[column] = input_dataset[column].astype('category')
-     input_dataset[column] = input_dataset[column].cat.codes
-#print(input_dataset)
+    if input_dataset[column].dtype != np.number:
+         input_dataset[column] = input_dataset[column].astype('category')
+         input_dataset[column] = input_dataset[column].cat.codes
 
-numberOfColumns = len(input_dataset.columns)
-min = input_dataset[numberOfColumns-1].min()
-max = input_dataset[numberOfColumns-1].max()
+# Normalize the data
+def normalize(df):
+    result = df.copy()
+    for feature_name in df.columns:
+        max_value = df[feature_name].max()
+        min_value = df[feature_name].min()
+        result[feature_name] = (df[feature_name] - min_value) / (max_value - min_value)
+    return result
 
-'''for index, row in input_dataset.iterrows():
-    x = row[(len(row)-1)]
-    if max-min != 0:
-        print((x - min) / (max - min))
-        row[(len(row) - 1)] = (x - min)/(max - min)'''
+# Normalize the data
+input_dataset = normalize(input_dataset)
+'''
 
-print(input_dataset)
 
+# Initialize random weights for entire network
 def initialize_newnetwork(numberOfInputs, hiddenneuronsList, outputNeurons):
     network = list()
     n_inputs = numberOfInputs
     n_outputs = outputNeurons
 
+    # Hidden layer weight initialization
     for n_hidden in hiddenneuronsList:
         hidden_layer = []
         for i in range(n_hidden):
@@ -41,9 +46,9 @@ def initialize_newnetwork(numberOfInputs, hiddenneuronsList, outputNeurons):
             hidden_layer.append(innerList)
         n_inputs = n_hidden
         network.append(hidden_layer)
+    n_hidden = hiddenneuronsList[len(hiddenneuronsList)-1]
 
-    # print("Initialized Network: ", network)
-    # return network
+    # Output layer weight initialization
     output_layer = []
     for i in range(n_outputs):
         innerList = []
@@ -53,60 +58,41 @@ def initialize_newnetwork(numberOfInputs, hiddenneuronsList, outputNeurons):
 
     network.append(output_layer)
 
-    print("Initialized Network: ", network)
     return network
 
-# Initialize a network
-def initialize_network(n_inputs, n_hidden, n_outputs):
-     network = list()
-     #hidden_layer = [{'weights': [random() for i in range(n_inputs + 1)]} for i in range(n_hidden)]
-     hidden_layer = []
-     for i in range(n_hidden):
-        innerList = []
-        for j in range(n_inputs + 1):
-            innerList.append(random())
-        hidden_layer.append(innerList)
-
-     network.append(hidden_layer)
-     #output_layer = [{'weights': [random() for i in range(n_hidden + 1)]} for i in range(n_outputs)]
-     output_layer = []
-     for i in range(n_outputs):
-        innerList = []
-        for j in range(n_hidden + 1):
-            innerList.append(random())
-        output_layer.append(innerList)
-
-     network.append(output_layer)
-
-     #print(network)
-     return network
 
 def findSigmoid(value):
-    value = 1/(1 + math.exp(-1 * value))
-    return round(value, 2)
+     value = 1/(1 + math.exp(-1 * value))
+     return round(value, 2)
 
+'''def findSigmoid(value):
+    if value < 0:
+        return 1 - 1 / (1 + math.exp(value))
+    return 1 / (1 + math.exp(-value))'''
+
+
+# This method calculates net output for a layer in the network
 def findNetList(layer, row):
     netLayerList = []
     for i in range(len(layer)):
         value = layer[i][0]  # bias
         for j in range(len(layer[i]) - 1):
             value = value + row[j] * layer[i][j + 1]
-        # print(findSigmoid(value))
         netLayerList.append(findSigmoid(value))
     return netLayerList
 
-
+# Forward Pass
 def forwardPass(network, row):
     networkNetList = [row]
+    # input for the next layer
     netLayerList = row
     for layer in network:
-        # print(layer)
         netLayerList = findNetList(layer, netLayerList)
         networkNetList.append(netLayerList)
     return networkNetList
-        # layer = [[1, 2, 3], [1, 1, 1], [1, 1, 1]]
-        # Iterate through each hidden layer node
 
+
+# Calculate delta
 def findDelta(layer, outputList, deltaList):
     newDeltaList = []
     # Update Bias weights
@@ -124,10 +110,11 @@ def findDelta(layer, outputList, deltaList):
         newDeltaList.append(value * outputList[i]*(1-outputList[i]))
     return newDeltaList
 
+
+# Backward Pass
 def backwardPass(network, networkNetList, row):
     length = len(networkNetList)
     targetIndex = len(row)-1
-    #print(row[targetIndex])
     # Get the final output list
     outputList = networkNetList[length-1]
     deltaList = []
@@ -140,52 +127,93 @@ def backwardPass(network, networkNetList, row):
     # Traverse through each layer in the network starting from last
     for layer in reversed(network):
         length = len(networkNetList)
-        # print("Length of networkNetList %s" %(length))
         deltaList = findDelta(layer, networkNetList[length-1], deltaList)
         del networkNetList[-1]
     return
 
+
+# Calculate mean squared error
 def findError(output,target):
     error = 0.5 * math.pow((target-output), 2)
     return error
 
+
+def printNetworkWeights(network):
+    print("-------------------------------------------------------------")
+    print("Note: First term of every neuron is bias")
+    print("-------------------------------------------------------------")
+    layerCount = 0;
+    for layer in network:
+        layerCount = layerCount+1
+        print('Layer %s : ' %(layerCount))
+        for i in range(len(layer)):
+            print("     Neuron[%s] weight: %s" %(i+1,layer[i]))
+    print("-------------------------------------------------------------")
+def findTestError(test, network):
+    totalTestError = 0
+    for index, row in test.iterrows():
+        # forward pass
+        networkNetList = forwardPass(network, row[:-1])
+        n = len(networkNetList)
+        finalOutputList = networkNetList[n - 1]
+        target = row[(len(row) - 1)]
+        totalTestError = totalTestError + findError(finalOutputList[0], target)
+
+    meanTestError = totalTestError / len(test)
+    return meanTestError
+
 def main():
-    # training_percent = 0.8
-    maxiterations = 10
-    # numberofhiddenlayers = 2
-    hiddenneuronsList = [4, 2]
+
+    training_percent = float(sys.argv[2]) if len(sys.argv) > 1 else 0.8
+    maxiterations = int(sys.argv[3]) if len(sys.argv) > 1 else 20
+    numberofhiddenlayers = int(sys.argv[4]) if len(sys.argv) > 1 else 2
+
+    hiddenneuronsList = []
+    if len(sys.argv) > 1:
+        for i in range(numberofhiddenlayers):
+            hiddenneuronsList.append(int(sys.argv[5+i]))
+    else:
+        hiddenneuronsList = [4]
+
+
     outputNeurons = 1
-    # neuronsInEachLayer = [len(input_dataset.columns), hiddenneurons, outputNeurons]
-    # network = initializeNetworkWeights(neuronsInEachLayer)
-    # numberofneurons = []
-    # for i in numberofhiddenlayers:
-    #     numberofneurons[i] = sys.argv[0]
+
+    # Dividing data into training and test randomly
+    df = pd.DataFrame(np.random.randn(100, 2))
+    msk = np.random.rand(len(input_dataset)) < training_percent
+    train = input_dataset[msk]
+    print("Training date size: ", len(train))
+    test = input_dataset[~msk]
+    print("Test data size:     ", len(test))
+
     seed(1)
-    numberOfInputs = len(input_dataset.columns) -1   # All except target value
-    # network = initialize_network(numberOfInputs, 3, 2) # parameters: Number of inputs, Number of neurons in hidden layer, Number of outputs
+    numberOfInputs = len(train.columns) - 1   # All except target value
+    # parameters: Number of inputs, List having number of neurons in each hidden layer, Number of outputs
     network = initialize_newnetwork(numberOfInputs, hiddenneuronsList, outputNeurons)
-    # print(" Network weights: ")
-    # print(network)
     error = -1
     while error != 0 and maxiterations != 0:
-        for index, row in input_dataset.iterrows():
+        for index, row in train.iterrows():
+            # forward pass
             networkNetList = forwardPass(network, row[:-1])
             n = len(networkNetList)
             finalOutputList = networkNetList[n-1]
-            # print(networkNetList)
-            # print("Foward pass weights: ",network)
+
+            # backward pass
             backwardPass(network, networkNetList, row)
-            # print("Backward pass weights: ",network)
-            # print("Target", row[(len(row)-1)])
-            x = row[(len(row)-1)]
-            target = (x - min) / (max - min)
+
+            target = row[(len(row)-1)]
             error = findError(finalOutputList[0],target)
-            #print("weights: ", network)
-            print("Error ",error)
+        # print("Error ", error)
         maxiterations = maxiterations - 1
 
+    # Print network weights
+    printNetworkWeights(network)
+
+    print("Training Error: ", error)
+
+    # Calculate mean test error
+    meanTestError = findTestError(test, network)
+
+    print("Test Error:     ", meanTestError)
+
 main()
-
-
-
-
